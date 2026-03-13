@@ -1,0 +1,70 @@
+\documentclass{article}
+
+\usepackage[margin=1.25in]{geometry}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[labelfont=bf]{caption}
+\usepackage{float}
+\usepackage{booktabs}
+
+\title{FMCW Radar Simulation and Implementation}
+\author{Henry Oehlrich}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{MATLAB Simulation}
+
+\subsection{Range FFT}
+
+The goal of this module is to simulate how an FMCW radar would identify object
+ranges. Initially, I planned to simulate the RF frontend: chirp generation and
+mixing; this proved to be infeasable to do with realistic parameters as the
+operating frequency of an FMCW radar is too large to be computed numerically.
+The chosen alternative approach is to generate a realistic IF signal given an
+array of ranges. This was done in the following manner.
+\begin{gather*}
+    \tau_i = \frac{2d_i}{c} \qquad
+    f_{IF,i} = \frac{B}{T_C} \tau_i \qquad
+    IF_i = \cos\left(2\pi f_{IF,i} t\right) \\
+    \implies IF = \left(\sum^i IF_i\right) * \text{noise}
+\end{gather*}
+Taking the FFT of $IF$ results in peaks at frequencies representing objects
+detected at different ranges. The object range represented by each frequency is
+as follows.
+\begin{equation*}
+    f_{IF} = \tau \, \frac{B}{T_C} = \frac{2d}{c} \frac{B}{T_C}
+    \quad \implies \quad d = \frac{fc\,T_C}{2B}
+\end{equation*}
+The range FFT can then be plotted as the positive half of $FFT\left(IF\right)$
+vs $d$.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{figures/range-fft.png}
+    \caption{Range FFT for objects at d = $5, 6, 12$}
+\end{figure}
+
+\newpage
+
+There are limitations on the resolution and maximum distance of range detection
+that are determined by the system parameters.
+\begin{gather*}
+    d_{res} = \frac{c}{2B} \qquad
+    d_{max} = \frac{F_s c T_C}{2B}
+\end{gather*}\vspace{-1.5em}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{cc}
+        \toprule
+        \midrule
+        $B$ & Chirp bandwidth \\
+        $T_C$ & Chirp period \\
+        $F_s$ & Sampling frequency \\
+        $c$ & Speed of light \\
+        \bottomrule
+    \end{tabular}
+    \caption{Fundamental FMCW parameters and constants}
+\end{table}
+
+\end{document}

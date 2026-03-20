@@ -1,0 +1,24 @@
+params.fs = 20e6;  % Sampling frequency
+params.Tc = 40e-6; % Chirp period
+params.B = 0.4e9;  % Chirp bandwidth
+params.fc = 77e9;  % Carrier frequency
+params.Nc = 128;   % Number of chirps
+params.noise = 0;  % Noise amplitude
+
+
+ranges = [50,60,120];
+velocities = [5, -10, -15];
+[ranges1, velocities1] = spread_targets(ranges, velocities, 0.5, 0.125, 25);
+
+% plot_range_fft(ranges, params);
+
+plot_range_doppler(ranges, velocities, params);
+
+x = linspace(0, max(A)*1.5, 1000);
+sigma = 1;
+pdf = (x/sigma^2) .* exp(-x.^2 / (2*sigma^2));
+figure;
+plot(x, pdf);
+xlabel('Amplitude');
+ylabel('Probability Density');
+title('Rayleigh Distribution (Swerling 2)');

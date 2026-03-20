@@ -1,0 +1,44 @@
+fs = 20e6;  % Sampling frequency
+Tc = 40e-6; % Chirp period
+B = 0.4e9;  % Chirp bandwidth
+fc = 77e9;  % Carrier frequency
+c = 3e8;    % Speed of light
+Nc = 128;   % Number of chirps
+t = 0:1/fs:Tc;
+N = length(t); % Num samples per chirp = num range fft bins
+
+ranges = [50,60,120];
+velocities = [5, -10, -15];
+d_step = velocities*Tc;
+2*pi*(2*velocities*fc/c)*Tc
+
+% Populate range_profiles from ranges and velocities
+range_profiles = zeros(Nc, N);
+for i = 1:Nc
+    IF = zeros(size(t));
+    for j = 1:length(ranges)
+        tau = 2*ranges(j)/c;
+        f_if = (B/Tc)*tau;
+        phi = 2*pi*(2*ranges(j)/c)*fc;
+        IF = IF + exp(1j*(2*pi*f_if*t + phi));
+    end
+    IF = IF + 0.7*randn(size(IF));
+    range_profiles(i, :) = fft(IF);
+    ranges = ranges + d_step;
+end
+
+% Calculate range doppler matrix
+range_doppler = fftshift(fft(range_profiles, [], 1), 1);
+
+half_N = floor(N/2);
+R = ((0)*c*Tc)/(2*B);
+f_doppler = (-Nc/2:Nc/2-1)*(1/Tc)/Nc;
+v_axis = f_doppler*c/(2*fc);
+
+
+figure;
+imagesc(R(1:half_N), v_axis, abs(range_doppler(:, 1:half_N)));
+xlabel('Range (m)');
+ylabel('Velocity (m/s)');
+title('Range-Doppler Map');
+colorbar;

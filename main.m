@@ -38,8 +38,11 @@ velocities = [5, -10, -15];
 % [detected, z, T] = cfar_1d(IF_fft, params);
 % plot_cfar_1d(detected, z, T, params);
 
+params.swerling = false;
+
 range_doppler_map = range_doppler(ranges, velocities, params);
 plot_range_doppler(range_doppler_map, params);
+
 % N = floor(params.Tc/(1/params.fs));
 % [detected2, z2, T2] = cfar_2d(range_doppler_map(:, 1:N/2)', params);
 % plot_cfar_2d(detected2, z2, T2, params);

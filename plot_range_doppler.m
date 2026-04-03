@@ -10,7 +10,7 @@ function plot_range_doppler(range_doppler_map, params)
 
     power = 20*log10(abs(range_doppler_map(:, 1:half_N)'));
 
-    % figure;
+    figure;
     imagesc(v_axis, R(1:half_N), power);
     clim([mean(power(:)), max(power(:))]);
     colormap(jet);

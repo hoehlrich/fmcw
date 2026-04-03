@@ -1,20 +1,49 @@
 params.fs = 20e6;       % Sampling frequency
+params.c = 3e8;         % Speed of light
 params.Tc = 40e-6;      % Chirp period
 params.B = 0.4e9;       % Chirp bandwidth
 params.fc = 77e9;       % Carrier frequency
 params.Nc = 128;        % Number of chirps
-params.noise = 0;       % Noise amplitude
+params.noise = 2;       % Noise amplitude
 params.swerling = true; % Swerling enabled
+params.cfar = true;     % CFAR enabled
 
+params.cfar_1d.P_FA = 0.0001;   % Probability of false alarm
+params.cfar_1d.N_R = 20;        % Number of resolution cells
+params.cfar_1d.N_G = 10;        % Number of guard cells
+
+params.cfar_2d.P_FA = 0.00001;   % Probability of false alarm
+params.cfar_2d.N_R = 17;
+params.cfar_2d.N_G = 5;
+params.cfar_2d.N_CR = 17;
+params.cfar_2d.N_CG = 5;
+
+delta_t = params.Nc*params.Tc;
+sigma_a = 20;
+sigma_d = params.c/(4*params.B);
+sigma_v = params.c/(params.fc*4*delta_t);
+params.tracking.N_frames = 50;
+params.tracking.F = [1 delta_t; 0 1];
+params.tracking.H = eye(2);
+params.tracking.Q = sigma_a^2*[delta_t^4/4 delta_t^3/2; delta_t^3/2 delta_t^2];
+params.tracking.R = [sigma_d^2 0; 0 sigma_v^2];
+params.tracking.gate_range = params.c/params.B;
+params.tracking.gamma = 9;  % For gating
 
 ranges = [50,60,120];
 velocities = [5, -10, -15];
-[ranges, velocities] = spread_targets(ranges, velocities, 0.25, 0.125, 25);
 
-% plot_range_fft(ranges, params);
-t = tiledlayout(1,2);
-nexttile;
-plot_range_doppler(ranges, velocities, params);
-params.swerling = false;
-nexttile;
-plot_range_doppler(ranges, velocities, params);
+% IF_fft = range_fft(ranges, params);
+% plot_range_fft(IF_fft, params);
+% [detected, z, T] = cfar_1d(IF_fft, params);
+% plot_cfar_1d(detected, z, T, params);
+
+range_doppler_map = range_doppler(ranges, velocities, params);
+plot_range_doppler(range_doppler_map, params);
+% N = floor(params.Tc/(1/params.fs));
+% [detected2, z2, T2] = cfar_2d(range_doppler_map(:, 1:N/2)', params);
+% plot_cfar_2d(detected2, z2, T2, params);
+
+% history = track_targets(ranges, velocities, params);
+% plot_tracking(history, params);
+

@@ -23,7 +23,7 @@
 
 The goal of this module is to simulate how an FMCW radar would identify object
 ranges. Initially, I planned to simulate the RF frontend: chirp generation and
-mixing; this proved to be infeasable to do with realistic parameters as the
+mixing; this proved to be infeasible to do with realistic parameters as the
 operating frequency of an FMCW radar is too large to be computed numerically.
 The chosen alternative approach is to generate a realistic IF signal given an
 array of ranges. This was done in the following manner.
@@ -71,7 +71,7 @@ that are determined by the system parameters.
     \caption{Fundamental FMCW parameters and constants}
 \end{table}
 
-\section{Range-Doppler FFT}
+\subsection{Range-Doppler FFT}
 The goal of this module is to simulate how an FMCW would determine object
 velocities. Firstly, we must simulate the effect of object velocities on the
 objects' range from chirp to chirp. For each chirp I defined the change in
@@ -81,7 +81,7 @@ range as
     d_n = d_{n-1} + d_{step}
 \end{equation*}
 Velocity estimation is calculated by monitoring changes in IF phase from chirp
-to chrip. Therefore, it is necessary to update the representation of the IF
+to chirp. Therefore, it is necessary to update the representation of the IF
 signal to one that reflects its true phase.
 \begin{equation*}
     IF = e^{j(2\pi f_{IF} t + \varphi)} \qquad , \qquad
@@ -192,9 +192,14 @@ range.
     \caption{Nonspreading (left) vs Spreading (right)}
 \end{figure}
 
+This crude expansion of targets generated good visual results but lacks
+physical rigour and introduced amplitude scaling issues due to constructive
+interference between scatterers. The following sections assume single point
+scatters per target.
+
 \subsubsection{Swerling 2 RCS Fluctuation}
 
-Another oversight of the approach so far is that it is assumed that the return
+An oversight of the approach so far is that it is assumed that the return
 signals from the Radar Cross Section (RCS) is non-fluctuating (i.e. for an
 object a given range and velocity an identical IF signal will be generated
 every time).
@@ -235,15 +240,329 @@ The Rayleigh probability density function (pdf) is as follows
 
 \newpage
 
-Swerling II RCS fluctuation is implemented by scaling each simulated chirp's IF
-response by a different value selected from a normalized Rayleigh distribution;
-resulting in a realistic smearing in velocity on the Range-Doppler map.
+Swerling II RCS fluctuation is implemented by scaling each object's simulated
+chirp's IF response by a different value selected from a normalized Rayleigh
+distribution; resulting in a realistic smearing in velocity on the
+Range-Doppler map.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{figures/swerling.png}
-    \caption{Range-Doppler maps with and without Swerling 2 RCS fluctuation (color scale compressed to reveal amplitude variation)}
+    \caption{Range-Doppler maps with and without Swerling 2 RCS fluctuation
+    (color scale compressed to reveal amplitude variation)}
 \end{figure}
+
+\subsection{Target Detection}
+
+\subsubsection{Cell Averaging Constant False Alarm Rate Detectors (CA-CFAR)}
+
+Constant false alarm rate (CFAR) detectors are designed to detect objects for a
+specified probability for a false alarm ($P_{F\!A}$). Compared to the
+Neyman-Pearson (NP) detector, where it is assumed that the interference
+environment is homogeneous (implying a constant threshold), CFAR detectors are
+viable in non-homogeneous interference environments (and thus generate a
+varying threshold).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.86\textwidth]{figures/cfar-architecture.png}
+    \caption{CFAR detector using measured samples to derive a threshold
+    designed to maintain a constant $P_{F\!A}$ in heterogeneous environments.}
+\end{figure}
+
+The figure above specifies the architecture of a 1D CFAR detector implemented
+using cell averaging (CA). The CFAR window represents the segment of the data
+that is being considered for the detection of the Cell Under Test (CUT). In
+order to determine a decision for the CUT, a threshold is calculated from the
+lagging and leading cells. Guard cells (G) are cells directly around the CUT
+that are not considered when calculating the threshold; This is to avoid the
+impact of multi-cell radar responses and leakage from skewing the threshold.
+
+Near the edges of the data window where there is not enough room for $N_R/2$
+lagging/leading cells, the non-constricted window can be extended by the same
+amount the constricted window is shortened. Said another way: the CUT need not
+always be in the center of the CFAR window.
+
+The threshold is computed as $\alpha$ times the mean power of the reference
+cells, where $\alpha$ is chosen to achieve the desired $P_{F\!A}$. And $\hat{g}$
+is a function of data in the reference window (lagging and leading for 1D).
+\begin{equation*}
+    T = \alpha \hat{g}
+\end{equation*}
+The cell averaging concept is naturally expanded into two dimensions (although
+the concept of lagging and leading cells is less meaningful). \\
+
+\noindent The CA-CFAR described and implemented here asserts the following:
+\begin{enumerate}
+    \item The interference in the reference window and CUT is independent and
+        identically distributed.
+    \item With a target return present in the CUT, the leading and lagging
+        windows do not contain returns from other targets that bias the
+        threshold estimate.
+    \item The interference is Rayleigh distributed in voltage
+    \item The rectifier is square law
+\end{enumerate}
+
+\noindent The best estimate of interference power of samples in the reference
+window ($z = [z_1, z_2, \dots, z_N]$). Where $z = |y|^2$ with the complex
+interference input signal $y$, and $\hat{\sigma}_i^{\,2}$ is the mean of the
+interference power. The CA-CFAR threshold $T_{CA}$ is defined as the product of
+the power estimate and the CA-CFAR constant $\alpha_{C\!A}$. $N$ represents the
+total number of cells in the reference window.
+\begin{gather*}
+    T_{CA} = \alpha_{C\!A} \, \hat{\sigma}_i^2 \\
+    \hat{\sigma}_i^2 = \frac{1}{N}\sum_{n=1}^N z_n \\
+    \alpha_{CA} = N \left[{P_{F\!A}}^{\!\!-1/N} - 1\right]
+\end{gather*}
+
+\newpage
+
+\subsubsection{1D CA-CFAR Detection}
+
+The following parameters are defined for a 1D CA-CFAR system.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{ll}
+        \toprule
+        \midrule
+        $N_R$ & Number of resolution cells \\
+        $P_{F\!A}$ & Probability of false alarm \\
+        $N_G$ & Number of guard cells \\
+        \bottomrule
+    \end{tabular}
+    \caption{1D CA-CFAR parameters}
+\end{table}
+
+The most obvious application of CFAR detection in a single dimension is
+detection of object ranges using the Range FFT. For this case, the input signal
+$y$ is the complex output of the range FFT. Each cell represents a discrete
+range.
+
+The figure below shows the results of a CA-CFAR algorithm on a range FFT.
+Detections are denoted with red triangles. The multiple detections at $x =
+\qty{120}{\meter}$ can be explained as a detection of the sidelobes of the
+peak. This artifact can be countered using windowing techniques or by simply
+combining detections that are closer than the range resolution of the radar.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figures/cfar-1d.png}
+    \caption{1D CA-CFAR detection on range FFT. $P_{F\!A} = 0.01\%$, $N_R = 20$, $N_G = 10$}
+\end{figure}
+
+\subsubsection{2D CA-CFAR Detection}
+
+CFAR can be logically extended to two dimensions by defining the following parameters.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{ll}
+        \toprule
+        \midrule
+        $N_R$ & Number of range cells (vertical) \\
+        $N_{CR}$ & Number of cross range cells (horizontal) \\
+        $N_G$ & Number of range guard cells (vertical) \\
+        $N_{CG}$ & Number of cross range guard cells (horizontal) \\
+        $P_{F\!A}$ & Probability of false alarm \\
+        \bottomrule
+    \end{tabular}
+    \caption{2D CA-CFAR parameters}
+\end{table}
+
+\newpage
+
+Applying two dimensional CFAR on the Range-Doppler map with no Swerling
+fluctuation produces the detections shown below. Detections are accurate in
+both range and velocity.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/cfar-2d.png}
+    \caption{2D CA-CFAR detection on Range-Doppler map. $P_{F\!A} = 0.001\%$,
+    $N_R = 17 = N_{C\!R}$, $N_G = 10 = N_{CG}$, No fluctuation}
+\end{figure}
+
+Running two dimensional CFAR on the Range-Doppler map with Swerling II
+fluctuation produces the detections shown below. Detections are denoted by
+white plus symbols. From observing the detection pattern it is clear that range
+is clearly determined; alternatively, the Swerling II fluctuation produces
+detections at velocities far from the objects true velocity. Velocity ambiguity
+introduced by Swerling II fluctuation will be addressed in the tracking stage
+through state estimation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/cfar-2d-fluctuating.png}
+    \caption{2D CA-CFAR detection on Range-Doppler map. $P_{F\!A} = 0.001\%$,
+    $N_R = 17 = N_{C\!R}$, $N_G = 10 = N_{CG}$, Swerling II Fluctuation}
+    \label{cfar:2d-fluctuating}
+\end{figure}
+
+\subsection{Object Tracking with the Kalman Filter}
+
+\subsubsection{The Kalman Filter}
+
+The Kalman filter is an optimal state estimation algorithm that models the
+evolution of a system's state over time using a linear motion model. After
+initialization it operates in a "predict-update" loop. In the predict step,
+state and uncertainty are extrapolated based on current information and the
+system motion. In the update step, the state estimate and uncertainty are
+updated based on the system measurement. \\
+
+\noindent \textbf{Predict} \\
+
+\noindent 1. Extrapolate the state
+\begin{equation*}
+    \mathbf{\hat{x}}_{n+1,n} = \mathbf{F} \mathbf{\hat{x}}_{n,n} + \mathbf{G} \mathbf{u}_n
+\end{equation*}
+2. Extrapolate uncertainty
+\begin{equation*}
+    \mathbf{P}_{n+1,n} = \mathbf{F}\mathbf{P}_{n,n} \mathbf{F}^T + \mathbf{Q}
+\end{equation*}
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{lp{8cm}}
+        \toprule
+        \midrule
+        $\mathbf{\hat{x}}_{n,m}$ & Estimated system state vector at time step $n$, computed using information available at time $m$ \\
+        $\mathbf{u}_n$ & Control variable or input variable, representing known external inputs to the system \\
+        $\mathbf{F}$ & State transition matrix \\
+        $\mathbf{G}$ & Input (control) matrix or input transition matrix, which maps inputs to state variables \\
+        $\mathbf{P}_{n,m}$ & Covariance matrix (squared uncertainty) of state at time step $n$, computed using information available at time $m$ \\
+        $\mathbf{Q}$ & Process noise matrix \\
+        \bottomrule
+    \end{tabular}
+    \caption{Kalman prediction system variables and parameters}
+\end{table}
+
+\noindent \textbf{Update} \\
+
+\noindent 1. Compute the Kalman Gain
+\begin{equation*}
+    \mathbf{K}_n = \mathbf{P}_{n,n-1} \mathbf{H}^T \left(\mathbf{H}\mathbf{P}_{n,n-1}\mathbf{H}^T + \mathbf{R}\right)^{-1}
+\end{equation*}
+2. Update estimate with measurement
+\begin{equation*}
+    \mathbf{\hat{x}}_{n,n} = \mathbf{\hat{x}}_{n,n-1} + \mathbf{K}_n (\mathbf{z}_n - \mathbf{H}\mathbf{\hat{x}}_{n,n-1})
+\end{equation*}
+3. Update the estimate uncertainty
+\begin{equation*}
+    \mathbf{P}_{n,n} = (\mathbf{I} - \mathbf{K}_n \mathbf{H}) \mathbf{P}_{n,n-1} (\mathbf{I} - \mathbf{K}_n \mathbf{H})^T + \mathbf{K}_n \mathbf{R} \mathbf{K}_n^T
+\end{equation*}
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{lp{8cm}}
+        \toprule
+        \midrule
+        $\mathbf{z}_n$ & Measurement vector \\
+        $\mathbf{K}_n$ & Kalman gain \\
+        $\mathbf{H}$ & Observation (measurement) matrix \\
+        $\mathbf{R}$ & Measurement noise covariance matrix \\
+        $\mathbf{I}$ & Identity matrix \\
+        \bottomrule
+    \end{tabular}
+    \caption{Kalman update system variables and parameters}
+\end{table}
+
+\subsubsection{State Definition and Motion Model}
+
+Define the state vector to include distance and velocity
+\begin{equation*}
+    \text{Let } \mathbf{x} = \begin{bmatrix} d \\ v \end{bmatrix}
+\end{equation*}
+Assuming constant velocity define the motion model state transition function
+\begin{gather*}
+    d_{k+1} = d_k + v_k \Delta t \quad , \quad v_{k+1} = v_k \\
+    \implies \mathbf{F} = \begin{bmatrix}
+        1 & \Delta t \\
+        0 & 1
+    \end{bmatrix}
+\end{gather*}
+CFAR measurements are directly in range and velocity therefore
+\begin{equation*}
+    \mathbf{H} = \mathbf{I}
+\end{equation*}
+The uncertainty of the motion model is defined using the standard formulation
+\begin{equation*}
+    \mathbf{Q} = \sigma_a^2 \begin{bmatrix}
+        \frac{\Delta t^4}{4} & \frac{\Delta t^3}{2} \\
+        \frac{\Delta t^3}{2} & \Delta t^2
+    \end{bmatrix} \quad , \quad \text{where } \sigma_a^2 = \text{variance of unknown acceleration} \\
+\end{equation*}
+The uncertainty of the CFAR detections themselves (assuming no cross-correlation) is defined as
+\begin{gather*}
+    \mathbf{R} = \begin{bmatrix}
+        \sigma_d^2 & 0 \\
+        0 & \sigma_v^2
+    \end{bmatrix} \quad \text{where} \quad
+    \sigma_d \approx d_{res}/2 \quad , \quad \sigma_v \approx v_{res}/2
+\end{gather*}
+Initial conditions are reasonably defined as
+\begin{gather*}
+    \mathbf{x}_0 = \begin{bmatrix}d_{detected} \\ v_{detected}\end{bmatrix}
+    \quad , \quad \mathbf{P}_0 = \mathbf{R}
+\end{gather*}
+There is no control input
+\begin{equation*}
+    \mathbf{u}_n = 0 \implies \mathbf{G} \text{ irrelevant}
+\end{equation*}
+
+\newpage
+
+\subsubsection{Data Association}
+
+The Kalman update step accepts only one measurement ($z_n$) for each track. To
+achieve this input a single CFAR detection must be associated with a specific
+track. This is traditionally done trough gating; i.e. defining a region on the
+range-Doppler map in which detections are associated with a track. The centroid
+of detections inside the gate is then used as the track measurement.
+
+Range gating is a rudimentary gating method where all detections within a
+specified distance of the predicted range are selected. Finding the centroid of
+gated detections produces a single usable input. The results of range gating
+are shown below. Swerling II fluctuation greatly impacts the convergence time of
+velocity tracking due to ambiguity in velocity (as shown in Figure
+\ref{cfar:2d-fluctuating}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/tracking-range-gated.png}
+    \caption{Kalman ($\sigma_a = 0.1$) filter tracking results using a range gate (width $2
+    d_{res}$), CA-CFAR detection, and Swerling II fluctuation}
+\end{figure}
+
+A more principled gating approach uses the Mahalanobis distance to define an
+elliptical gate centered at the predicted state. A detection $\mathbf{z}$ is
+included in the gate if:
+\begin{equation}
+    (\mathbf{z} - \hat{\mathbf{x}}_{n,n-1})^T \mathbf{S}^{-1}
+    (\mathbf{z} - \hat{\mathbf{x}}_{n,n-1}) \leq \gamma
+\end{equation}
+where $\mathbf{S} = H P_{n,n-1} H^T + R$ is the innovation covariance and
+$\gamma$ is the gate threshold. Unlike range gating, this approach accounts
+for uncertainty in both range and velocity, naturally excluding
+Swerling-scattered detections that are statistically inconsistent with the
+predicted state.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/tracking-mahalanobis.png}
+    \caption{Kalman filter ($\sigma_a = 0.1$) tracking results using
+    Mahalanobis gating with $\gamma = 9$, CA-CFAR detection, and Swerling II
+    fluctuation}
+\end{figure}
+
+The results for Mahalanobis gating are shown above. The impact of Swerling II
+fluctuation is wholly removed and both range and velocity track nearly
+identically with the true values.
+
+\subsubsection{Results}
 
 
 \end{document}
